@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>SalonFlow</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 
@@ -824,6 +824,13 @@ input:focus-visible, select:focus-visible, button:focus-visible{
     document.getElementById('statCustomers').textContent = uniquePhones.size;
     document.getElementById('statAvg').textContent = RUPEE(avg);
     document.getElementById('statTop').textContent = topService;
+
+    if(typeof Chart === 'undefined'){
+      document.querySelectorAll('.chart-wrap').forEach(el=>{
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:12px;color:var(--slate);text-align:center;padding:0 12px;">Chart library failed to load — check your connection and reload.</div>';
+      });
+      return;
+    }
 
     // Monthly bar chart — last 6 months
     const now = TODAY();
