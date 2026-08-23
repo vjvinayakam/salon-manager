@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Salon Manager Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css" />
+  <!-- Chart.js for Performance Visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- Toast Notification System -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <div class="brand">
+        <span class="brand-icon">✂️</span>
+        <span class="brand-name" id="nav-salon-name">Luxe Salon & Spa</span>
+      </div>
+      <div class="nav-links">
+        <button class="nav-btn active" data-view="dashboard">Dashboard</button>
+        <button class="nav-btn" data-view="add-customer">+ Add Customer</button>
+        <button class="nav-btn" data-view="performance">Performance</button>
+        <button class="nav-btn" data-view="transactions">Transactions</button>
+        <button class="nav-btn" data-view="settings">Settings</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="main-content">
+    
+    <!-- View 1: Main Dashboard -->
+    <section id="view-dashboard" class="view active">
+      <div class="section-header">
+        <div>
+          <h1 class="page-title">Salon Dashboard</h1>
+          <p class="current-date" id="dashboard-date">Today</p>
+        </div>
+        <button class="btn btn-primary" onclick="switchView('add-customer')">+ Add Customer</button>
+      </div>
+
+      <!-- Quick Metrics -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span class="metric-label">Today's Revenue</span>
+          <span class="metric-value" id="dash-today-rev">₹0</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">This Month</span>
+          <span class="metric-value" id="dash-month-rev">₹0</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">This Year</span>
+          <span class="metric-value" id="dash-year-rev">₹0</span>
+        </div>
+      </div>
+
+      <!-- Recent Transactions Table -->
+      <div class="card recent-card">
+        <div class="card-header">
+          <h2 class="card-title">Recent Transactions</h2>
+          <button class="btn-link" onclick="switchView('transactions')">View All →</button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Service</th>
+                <th>Price</th>
+                <th>Date</th>
+                <th>WhatsApp</th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-tx-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 2: Add Customer Form -->
+    <section id="view-add-customer" class="view">
+      <div class="form-container card">
+        <h2 class="card-title">Add Customer</h2>
+        <p class="card-subtitle">Submit details to save to Google Sheets & send an automated WhatsApp bill.</p>
+
+        <form id="add-customer-form" onsubmit="handleCustomerSubmit(event)" novalidate>
+          <div class="form-group">
+            <label for="cust-name">Customer Name *</label>
+            <input type="text" id="cust-name" class="form-control" placeholder="Enter customer name" required />
+            <small class="error-text" id="cust-name-error"></small>
+          </div>
+
+          <div class="form-group">
+            <label for="cust-phone">Phone Number (WhatsApp) *</label>
+            <div class="input-prefix-group">
+              <span class="prefix">+91</span>
+              <input type="tel" id="cust-phone" class="form-control" placeholder="Enter WhatsApp number (e.g. 9876543210)" maxlength="10" required />
+            </div>
+            <small class="error-text" id="cust-phone-error"></small>
+          </div>
+
+          <div class="form-group">
+            <label for="cust-service">Service *</label>
+            <select id="cust-service" class="form-control" onchange="updateDefaultPrice(this.value)" required>
+              <!-- Populated via JS -->
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="cust-price">Price (₹) *</label>
+            <div class="input-prefix-group">
+              <span class="prefix">₹</span>
+              <input type="number" id="cust-price" class="form-control" placeholder="Enter price" min="0" required />
+            </div>
+            <small class="error-text" id="cust-price-error"></small>
+          </div>
+
+          <button type="submit" id="submit-btn" class="btn btn-primary btn-block">
+            <span id="submit-spinner" class="spinner hidden"></span>
+            <span id="submit-text">Send & Save</span>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- View 3: Performance -->
+    <section id="view-performance" class="view">
+      <div class="section-header">
+        <div>
+          <h1 class="page-title">Performance Analytics</h1>
+          <p class="current-date">Track salon growth, transaction volume & popular services</p>
+        </div>
+        <div class="filter-controls">
+          <select id="time-filter" class="form-control form-control-sm" onchange="applyDateFilter(this.value)">
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month" selected>This Month</option>
+            <option value="year">This Year</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="syncPerformanceFromWebhook()">↻ Sync n8n</button>
+        </div>
+      </div>
+
+      <!-- Performance Metrics Cards -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span class="metric-label">Total Customers</span>
+          <span class="metric-value" id="perf-total-customers">0</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Total Transactions</span>
+          <span class="metric-value" id="perf-total-tx">0</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Avg Transaction Value</span>
+          <span class="metric-value" id="perf-avg-tx">₹0</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Most Popular Service</span>
+          <span class="metric-value text-truncate" id="perf-popular-service">-</span>
+        </div>
+      </div>
+
+      <!-- Charts Section -->
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="chart-title">Monthly Revenue (2026)</h3>
+          </div>
+          <div class="chart-container">
+            <canvas id="monthlyRevenueChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="chart-title">Revenue by Service</h3>
+          </div>
+          <div class="chart-container">
+            <canvas id="serviceRevenueChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 4: Transactions List -->
+    <section id="view-transactions" class="view">
+      <div class="section-header">
+        <h1 class="page-title">All Transactions</h1>
+        <input type="text" id="tx-search" class="form-control search-input" placeholder="Search by name, service or phone..." oninput="filterTransactions(this.value)" />
+      </div>
+
+      <div class="card">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Phone</th>
+                <th>Service</th>
+                <th>Price</th>
+                <th>Date & Time</th>
+                <th>WhatsApp Status</th>
+              </tr>
+            </thead>
+            <tbody id="all-transactions-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 5: Settings -->
+    <section id="view-settings" class="view">
+      <div class="settings-grid">
+        <!-- Business Profile -->
+        <div class="card">
+          <h2 class="card-title">Salon Settings</h2>
+          <form id="settings-form" onsubmit="saveSettings(event)">
+            <div class="form-group">
+              <label for="set-salon-name">Salon Name</label>
+              <input type="text" id="set-salon-name" class="form-control" required />
+            </div>
+            <div class="form-group">
+              <label for="set-owner-name">Owner Name</label>
+              <input type="text" id="set-owner-name" class="form-control" required />
+            </div>
+            <div class="form-group">
+              <label for="set-owner-phone">Owner WhatsApp Number</label>
+              <input type="tel" id="set-owner-phone" class="form-control" placeholder="+91 XXXXX XXXXX" required />
+            </div>
+            <div class="form-group">
+              <label for="set-msg-template">WhatsApp Message Template Preview</label>
+              <textarea id="set-msg-template" class="form-control" rows="5" readonly></textarea>
+              <small class="helper-text">Variables {name}, {service}, {price}, and {salon} are populated by n8n.</small>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Profile</button>
+          </form>
+        </div>
+
+        <!-- Service & Webhook Configurations -->
+        <div class="card">
+          <h2 class="card-title">Manage Services & Webhooks</h2>
+          
+          <div class="service-manager">
+            <label>Current Services & Pricing</label>
+            <div id="service-list" class="service-list-items"></div>
+            
+            <div class="add-service-inline">
+              <input type="text" id="new-service-name" class="form-control" placeholder="New Service Name" />
+              <input type="number" id="new-service-price" class="form-control" placeholder="₹ Price" />
+              <button class="btn btn-secondary" onclick="addNewService()">Add</button>
+            </div>
+          </div>
+
+          <hr class="divider" />
+
+          <h3 class="sub-heading">API & Webhook Endpoints</h3>
+          <p class="helper-text">Endpoints are stored safely in local browser storage (GitHub Pages compatible).</p>
+
+          <div class="form-group">
+            <label for="set-webhook-url">n8n Transaction Webhook URL</label>
+            <input type="url" id="set-webhook-url" class="form-control" placeholder="https://your-n8n-instance/webhook/..." />
+          </div>
+
+          <div class="form-group">
+            <label for="set-perf-url">n8n Performance Data URL</label>
+            <input type="url" id="set-perf-url" class="form-control" placeholder="https://your-n8n-instance/webhook/perf-data" />
+          </div>
+
+          <button class="btn btn-secondary" onclick="saveWebhookSettings()">Update Webhook URLs</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
