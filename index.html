@@ -384,17 +384,16 @@
 
   <script>
     /**
-     * SUPABASE & RAZORPAY CONFIGURATION
-     * Replace PASTE_YOUR_ANON_PUBLIC_KEY_HERE with your real key from Supabase Project Settings > API
+     * PRODUCTION LIVE CONFIGURATION
      */
     const SUPABASE_URL = "https://hxcfszclzyvhctbphtzn.supabase.co";
-    const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_PUBLIC_KEY_HERE";
-    const RAZORPAY_KEY_ID = "rzp_test_YOUR_KEY_ID";
+    const SUPABASE_ANON_KEY = "sb_publishable_s7ZLRNGSNm9YjLFvTy-b-Q_JlLCS8GJ";
+    const RAZORPAY_KEY_ID = "rzp_live_SZ0KtC8cO2S37n";
 
     // Initialize Supabase Client (v2)
-    const supabase = (SUPABASE_ANON_KEY.includes("PASTE_YOUR_ANON") || typeof window.supabase === "undefined") 
-      ? null 
-      : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabase = (typeof window.supabase !== "undefined" && SUPABASE_ANON_KEY) 
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      : null;
 
     // SaaS Application State
     let authMode = "signup";
@@ -421,15 +420,19 @@
 
       // Check Active Supabase Session
       if (supabase) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          currentUser = session.user;
-          await loadSalonData();
-        } else {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            currentUser = session.user;
+            await loadSalonData();
+          } else {
+            showAuthModal();
+          }
+        } catch (e) {
+          console.warn("Session check error, falling back to login:", e);
           showAuthModal();
         }
       } else {
-        // Offline / Demo Mode fallback
         loadDemoMode();
       }
     });
@@ -464,7 +467,6 @@
 
       try {
         if (!supabase) {
-          // Demo Mode Login
           currentUser = { id: "demo-user", email };
           currentSalon = { id: "demo-salon", salon_name: salonName || "Luxe Salon", subscription_status: "trial", trial_ends_at: new Date(Date.now() + 14*86400000) };
           salonServices = [...DEFAULT_SERVICES];
@@ -837,21 +839,8 @@
       showToast("Salon name updated.", "success");
     }
 
-    // Razorpay Recurring Subscription Trigger
+    // Razorpay Live Recurring Subscription Trigger
     function launchRazorpayCheckout() {
-      if (RAZORPAY_KEY_ID.includes("YOUR_KEY")) {
-        if (confirm("Simulate successful ₹499 Razorpay Payment to activate 30 days?")) {
-          if (currentSalon) {
-            currentSalon.subscription_status = "active";
-            if (supabase) supabase.from("salons").update({ subscription_status: "active" }).eq("id", currentSalon.id);
-          }
-          document.getElementById("paywall-modal").classList.add("hidden");
-          document.getElementById("info-sub-status").innerText = "Active (Subscribed)";
-          showToast("Subscription activated!", "success");
-        }
-        return;
-      }
-
       const options = {
         key: RAZORPAY_KEY_ID,
         amount: 49900,
