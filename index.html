@@ -21,7 +21,7 @@
       --bg-card: #ffffff;
       --text-main: #0f172a;
       --text-muted: #64748b;
-      --primary: #c2410c; /* Warm terracotta */
+      --primary: #c2410c;
       --primary-hover: #9a3412;
       --primary-light: #ffedd5;
       --border: #e2e8f0;
@@ -133,7 +133,7 @@
 </head>
 <body>
 
-  <!-- Toast Container -->
+  <!-- Toast Notification -->
   <div id="toast" class="toast hidden"></div>
 
   <!-- 1. AUTH MODAL (Login / Signup) -->
@@ -170,7 +170,7 @@
     </div>
   </div>
 
-  <!-- 2. SUBSCRIPTION PAYWALL MODAL (Triggered when trial expires) -->
+  <!-- 2. SUBSCRIPTION PAYWALL MODAL -->
   <div id="paywall-modal" class="modal-overlay hidden">
     <div class="modal-card">
       <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔒</div>
@@ -385,19 +385,19 @@
   <script>
     /**
      * SUPABASE & RAZORPAY CONFIGURATION
-     * Replace with your public Supabase credentials and Razorpay Key ID
+     * Replace PASTE_YOUR_ANON_PUBLIC_KEY_HERE with your real key from Supabase Project Settings > API
      */
-    const SUPABASE_URL = "https://YOUR_SUPABASE_PROJECT_ID.supabase.co";
-    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+    const SUPABASE_URL = "https://hxcfszclzyvhctbphtzn.supabase.co";
+    const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_PUBLIC_KEY_HERE";
     const RAZORPAY_KEY_ID = "rzp_test_YOUR_KEY_ID";
 
     // Initialize Supabase Client (v2)
-    const supabase = (SUPABASE_URL.includes("YOUR_SUPABASE") || typeof window.supabase === "undefined") 
+    const supabase = (SUPABASE_ANON_KEY.includes("PASTE_YOUR_ANON") || typeof window.supabase === "undefined") 
       ? null 
       : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // SaaS Application State
-    let authMode = "signup"; // 'signup' | 'signin'
+    let authMode = "signup";
     let currentUser = null;
     let currentSalon = null;
     let salonServices = [];
@@ -840,7 +840,6 @@
     // Razorpay Recurring Subscription Trigger
     function launchRazorpayCheckout() {
       if (RAZORPAY_KEY_ID.includes("YOUR_KEY")) {
-        // Fallback simulation for preview testing
         if (confirm("Simulate successful ₹499 Razorpay Payment to activate 30 days?")) {
           if (currentSalon) {
             currentSalon.subscription_status = "active";
@@ -855,7 +854,7 @@
 
       const options = {
         key: RAZORPAY_KEY_ID,
-        amount: 49900, // ₹499.00 in subunits
+        amount: 49900,
         currency: "INR",
         name: "SalonFlow SaaS",
         description: "Monthly Pro Subscription",
