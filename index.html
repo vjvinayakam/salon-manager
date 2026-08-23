@@ -464,6 +464,7 @@
 
       errEl.innerText = "";
       btn.innerText = "Processing...";
+      btn.disabled = true;
 
       try {
         if (!supabase) {
@@ -476,37 +477,71 @@
         }
 
         if (authMode === "signup") {
-          const { data, error } = await supabase.auth.signUp({ email, password });
-          if (error) throw error;
-          currentUser = data.user;
+          // 1. Sign up user
+          const { data: authData, error: authError } = await supabase.auth.signUp({ 
+            email, 
+            password,
+            options: {
+              data: { salon_name: salonName || "My Salon" }
+            }
+          });
+          if (authError) throw authError;
 
-          // Create Salon Profile in Supabase
-          const { data: salonData, error: sErr } = await supabase
-            .from("salons")
-            .insert([{ owner_id: currentUser.id, salon_name: salonName || "My Salon", owner_phone: "" }])
-            .select()
-            .single();
-          
-          if (sErr) throw sErr;
-          currentSalon = salonData;
+          currentUser = authData.user;
 
-          // Seed Default Services
-          const seeded = DEFAULT_SERVICES.map(s => ({ salon_id: currentSalon.id, name: s.name, price: s.price }));
-          await supabase.from("services").insert(seeded);
+          if (!authData.session) {
+            // Establish full JWT session
+            const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
+            if (loginErr) throw loginErr;
+            currentUser = loginData.user;
+          }
+
+          // 2. Check/create salon profile
+          const { data: existingSalons } = await supabase.from("salons").select("*").eq("owner_id", currentUser.id);
           
-          await loadSalonData();
+          if (!existingSalons || existingSalons.length === 0) {
+            const { data: newSalon, error: sErr } = await supabase
+              .from("salons")
+              .insert([{ 
+                owner_id: currentUser.id, 
+                salon_name: salonName || "My Salon", 
+                owner_phone: "",
+                subscription_status: "trial",
+                trial_ends_at: new Date(Date.now() + 14*86400000).toISOString()
+              }])
+              .select();
+
+            if (sErr) throw sErr;
+            currentSalon = newSalon ? newSalon[0] : null;
+
+            // 3. Seed default services
+            if (currentSalon) {
+              const seeded = DEFAULT_SERVICES.map(s => ({ 
+                salon_id: currentSalon.id, 
+                name: s.name, 
+                price: s.price,
+                is_active: true
+              }));
+              await supabase.from("services").insert(seeded);
+            }
+          }
         } else {
-          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-          if (error) throw error;
-          currentUser = data.user;
-          await loadSalonData();
+          // Sign In mode
+          const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
+          if (loginErr) throw loginErr;
+          currentUser = loginData.user;
         }
 
+        // 4. Load salon workspace & close modal
+        await loadSalonData();
         document.getElementById("auth-modal").classList.add("hidden");
-        showToast("Signed in successfully!", "success");
+        showToast("Welcome to your dashboard!", "success");
+
       } catch (err) {
+        console.error("Auth error:", err);
         errEl.innerText = err.message || "Authentication failed.";
       } finally {
+        btn.disabled = false;
         btn.innerText = authMode === "signup" ? "Sign Up & Start Trial" : "Sign In";
       }
     }
@@ -521,29 +556,51 @@
     async function loadSalonData() {
       if (!supabase || !currentUser) return;
 
-      // 1. Fetch Salon Details
-      const { data: salon } = await supabase.from("salons").select("*").eq("owner_id", currentUser.id).single();
-      currentSalon = salon;
+      try {
+        // Fetch Salon Details
+        const { data: salons } = await supabase
+          .from("salons")
+          .select("*")
+          .eq("owner_id", currentUser.id);
 
-      // 2. Paywall Check
-      if (currentSalon) {
-        const isTrialActive = new Date(currentSalon.trial_ends_at) > new Date();
-        const isPaid = currentSalon.subscription_status === "active";
-        if (!isTrialActive && !isPaid) {
-          document.getElementById("paywall-modal").classList.remove("hidden");
-          return;
+        if (salons && salons.length > 0) {
+          currentSalon = salons[0];
         }
+
+        // Paywall Check
+        if (currentSalon) {
+          const isTrialActive = new Date(currentSalon.trial_ends_at) > new Date();
+          const isPaid = currentSalon.subscription_status === "active";
+          if (!isTrialActive && !isPaid) {
+            document.getElementById("paywall-modal").classList.remove("hidden");
+            return;
+          }
+        }
+
+        // Fetch Services
+        if (currentSalon) {
+          const { data: srvs } = await supabase
+            .from("services")
+            .select("*")
+            .eq("salon_id", currentSalon.id)
+            .eq("is_active", true);
+          
+          salonServices = (srvs && srvs.length > 0) ? srvs : [...DEFAULT_SERVICES];
+
+          // Fetch Transactions
+          const { data: txs } = await supabase
+            .from("transactions")
+            .select("*")
+            .eq("salon_id", currentSalon.id)
+            .order("created_at", { ascending: false });
+
+          transactionsList = txs || [];
+        }
+
+        renderAllViews();
+      } catch (err) {
+        console.error("Error loading salon data:", err);
       }
-
-      // 3. Fetch Services
-      const { data: srvs } = await supabase.from("services").select("*").eq("salon_id", currentSalon.id).eq("is_active", true);
-      salonServices = srvs || [];
-
-      // 4. Fetch Transactions
-      const { data: txs } = await supabase.from("transactions").select("*").eq("salon_id", currentSalon.id).order("created_at", { ascending: false });
-      transactionsList = txs || [];
-
-      renderAllViews();
     }
 
     function renderAllViews() {
