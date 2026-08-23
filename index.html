@@ -384,18 +384,15 @@
 
   <script>
     /**
-     * PRODUCTION LIVE CONFIGURATION
+     * PRODUCTION CONFIGURATION
      */
     const SUPABASE_URL = "https://hxcfszclzyvhctbphtzn.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_s7ZLRNGSNm9YjLFvTy-b-Q_JlLCS8GJ";
     const RAZORPAY_KEY_ID = "rzp_live_SZ0KtC8cO2S37n";
 
-    // Initialize Supabase Client (v2)
-    const supabase = (typeof window.supabase !== "undefined" && SUPABASE_ANON_KEY) 
-      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-      : null;
+    // Initialize Supabase Client
+    const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-    // SaaS Application State
     let authMode = "signup";
     let currentUser = null;
     let currentSalon = null;
@@ -404,7 +401,6 @@
     let chartMonthlyInstance = null;
     let chartServiceInstance = null;
 
-    // Default Services for New Salons
     const DEFAULT_SERVICES = [
       { name: "Hair Cut", price: 300 },
       { name: "Beard Trim", price: 200 },
@@ -413,23 +409,28 @@
       { name: "Hair Dye", price: 1200 }
     ];
 
-    // App Initialization
     document.addEventListener("DOMContentLoaded", async () => {
       initNavigation();
       document.getElementById("dashboard-date").innerText = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
 
-      // Check Active Supabase Session
       if (supabase) {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
+        // Listen for Auth changes automatically
+        supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session && session.user) {
             currentUser = session.user;
             await loadSalonData();
+            document.getElementById("auth-modal").classList.add("hidden");
           } else {
             showAuthModal();
           }
-        } catch (e) {
-          console.warn("Session check error, falling back to login:", e);
+        });
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          currentUser = session.user;
+          await loadSalonData();
+          document.getElementById("auth-modal").classList.add("hidden");
+        } else {
           showAuthModal();
         }
       } else {
@@ -437,7 +438,6 @@
       }
     });
 
-    // Authentication Handlers
     function showAuthModal() {
       document.getElementById("auth-modal").classList.remove("hidden");
     }
@@ -458,88 +458,94 @@
       e.preventDefault();
       const email = document.getElementById("auth-email").value.trim();
       const password = document.getElementById("auth-password").value.trim();
-      const salonName = document.getElementById("auth-salon-name").value.trim();
+      const salonName = document.getElementById("auth-salon-name").value.trim() || "My Salon";
       const errEl = document.getElementById("auth-error");
       const btn = document.getElementById("btn-auth-submit");
 
       errEl.innerText = "";
-      btn.innerText = "Processing...";
+      btn.innerText = "Connecting...";
       btn.disabled = true;
 
       try {
         if (!supabase) {
-          currentUser = { id: "demo-user", email };
-          currentSalon = { id: "demo-salon", salon_name: salonName || "Luxe Salon", subscription_status: "trial", trial_ends_at: new Date(Date.now() + 14*86400000) };
-          salonServices = [...DEFAULT_SERVICES];
-          document.getElementById("auth-modal").classList.add("hidden");
-          renderAllViews();
-          return;
+          throw new Error("Supabase library not loaded. Check your connection.");
         }
 
         if (authMode === "signup") {
-          // 1. Sign up user
-          const { data: authData, error: authError } = await supabase.auth.signUp({ 
-            email, 
-            password,
-            options: {
-              data: { salon_name: salonName || "My Salon" }
-            }
+          // 1. Try Signing Up
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email,
+            password
           });
-          if (authError) throw authError;
 
-          currentUser = authData.user;
-
-          if (!authData.session) {
-            // Establish full JWT session
-            const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
-            if (loginErr) throw loginErr;
-            currentUser = loginData.user;
+          if (authError) {
+            // If already registered, attempt direct Sign In
+            if (authError.message.toLowerCase().includes("already registered")) {
+              const { data: logData, error: logErr } = await supabase.auth.signInWithPassword({ email, password });
+              if (logErr) throw logErr;
+              currentUser = logData.user;
+            } else {
+              throw authError;
+            }
+          } else {
+            currentUser = authData.user;
           }
 
-          // 2. Check/create salon profile
-          const { data: existingSalons } = await supabase.from("salons").select("*").eq("owner_id", currentUser.id);
-          
-          if (!existingSalons || existingSalons.length === 0) {
-            const { data: newSalon, error: sErr } = await supabase
+          // If no session token returned directly, log in to set cookie/storage
+          if (!authData?.session) {
+            const { data: logData, error: logErr } = await supabase.auth.signInWithPassword({ email, password });
+            if (!logErr && logData.user) {
+              currentUser = logData.user;
+            }
+          }
+
+          // 2. Initialize Salon Profile
+          if (currentUser) {
+            const { data: existingSalons } = await supabase
               .from("salons")
-              .insert([{ 
-                owner_id: currentUser.id, 
-                salon_name: salonName || "My Salon", 
-                owner_phone: "",
-                subscription_status: "trial",
-                trial_ends_at: new Date(Date.now() + 14*86400000).toISOString()
-              }])
-              .select();
+              .select("*")
+              .eq("owner_id", currentUser.id);
 
-            if (sErr) throw sErr;
-            currentSalon = newSalon ? newSalon[0] : null;
+            if (!existingSalons || existingSalons.length === 0) {
+              const { data: newSalons, error: sErr } = await supabase
+                .from("salons")
+                .insert([{
+                  owner_id: currentUser.id,
+                  salon_name: salonName,
+                  owner_phone: "",
+                  subscription_status: "trial"
+                }])
+                .select();
 
-            // 3. Seed default services
-            if (currentSalon) {
-              const seeded = DEFAULT_SERVICES.map(s => ({ 
-                salon_id: currentSalon.id, 
-                name: s.name, 
-                price: s.price,
-                is_active: true
-              }));
-              await supabase.from("services").insert(seeded);
+              if (sErr) console.warn("Salon create warning:", sErr.message);
+
+              if (newSalons && newSalons.length > 0) {
+                currentSalon = newSalons[0];
+                const seeded = DEFAULT_SERVICES.map(s => ({
+                  salon_id: currentSalon.id,
+                  name: s.name,
+                  price: s.price,
+                  is_active: true
+                }));
+                await supabase.from("services").insert(seeded);
+              }
             }
           }
         } else {
-          // Sign In mode
-          const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
-          if (loginErr) throw loginErr;
-          currentUser = loginData.user;
+          // Direct Sign In
+          const { data: logData, error: logErr } = await supabase.auth.signInWithPassword({ email, password });
+          if (logErr) throw logErr;
+          currentUser = logData.user;
         }
 
-        // 4. Load salon workspace & close modal
+        // Close modal and refresh dashboard
         await loadSalonData();
         document.getElementById("auth-modal").classList.add("hidden");
-        showToast("Welcome to your dashboard!", "success");
+        showToast("Logged in successfully!", "success");
 
       } catch (err) {
         console.error("Auth error:", err);
-        errEl.innerText = err.message || "Authentication failed.";
+        errEl.innerText = err.message || "Authentication error occurred.";
       } finally {
         btn.disabled = false;
         btn.innerText = authMode === "signup" ? "Sign Up & Start Trial" : "Sign In";
@@ -552,12 +558,10 @@
       location.reload();
     }
 
-    // Data Syncing with Supabase
     async function loadSalonData() {
       if (!supabase || !currentUser) return;
 
       try {
-        // Fetch Salon Details
         const { data: salons } = await supabase
           .from("salons")
           .select("*")
@@ -565,29 +569,24 @@
 
         if (salons && salons.length > 0) {
           currentSalon = salons[0];
+        } else {
+          // If no salon record exists for this user, auto-generate one
+          const { data: newSalons } = await supabase
+            .from("salons")
+            .insert([{ owner_id: currentUser.id, salon_name: "My Salon" }])
+            .select();
+          if (newSalons && newSalons.length > 0) currentSalon = newSalons[0];
         }
 
-        // Paywall Check
-        if (currentSalon) {
-          const isTrialActive = new Date(currentSalon.trial_ends_at) > new Date();
-          const isPaid = currentSalon.subscription_status === "active";
-          if (!isTrialActive && !isPaid) {
-            document.getElementById("paywall-modal").classList.remove("hidden");
-            return;
-          }
-        }
-
-        // Fetch Services
         if (currentSalon) {
           const { data: srvs } = await supabase
             .from("services")
             .select("*")
             .eq("salon_id", currentSalon.id)
             .eq("is_active", true);
-          
+
           salonServices = (srvs && srvs.length > 0) ? srvs : [...DEFAULT_SERVICES];
 
-          // Fetch Transactions
           const { data: txs } = await supabase
             .from("transactions")
             .select("*")
@@ -598,8 +597,8 @@
         }
 
         renderAllViews();
-      } catch (err) {
-        console.error("Error loading salon data:", err);
+      } catch (e) {
+        console.error("Error loading workspace data:", e);
       }
     }
 
@@ -615,7 +614,6 @@
       renderServicesSettings();
     }
 
-    // Navigation Switcher
     function initNavigation() {
       document.querySelectorAll(".nav-btn").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -636,7 +634,6 @@
       if (viewName === "performance") renderCharts();
     }
 
-    // Transaction & Billing Handlers
     function populateServiceDropdown() {
       const select = document.getElementById("cust-service");
       select.innerHTML = "";
@@ -680,7 +677,7 @@
       }
 
       const txPayload = {
-        salon_id: currentSalon ? currentSalon.id : "demo",
+        salon_id: currentSalon ? currentSalon.id : null,
         customer_name: name,
         customer_phone: phone,
         service_name: serviceInput.value,
@@ -689,7 +686,6 @@
         whatsapp_status: "Sent"
       };
 
-      // 1. Insert into Supabase
       if (supabase && currentSalon) {
         const { data, error } = await supabase.from("transactions").insert([txPayload]).select().single();
         if (error) {
@@ -702,13 +698,11 @@
         transactionsList.unshift(txPayload);
       }
 
-      // 2. Reset form
       nameInput.value = "";
       phoneInput.value = "";
       renderDashboard();
       renderTransactionsTable();
 
-      // 3. Dispatch WhatsApp Message directly
       const salonName = currentSalon ? currentSalon.salon_name : "Our Salon";
       const message = encodeURIComponent(
         `Hi ${txPayload.customer_name} 👋\nThank you for visiting ${salonName}.\n\nService: ${txPayload.service_name}\nAmount: ₹${txPayload.price}\n\nThank you for choosing us!\n— ${salonName}`
@@ -717,7 +711,6 @@
       window.location.href = `https://api.whatsapp.com/send?phone=91${txPayload.customer_phone}&text=${message}`;
     }
 
-    // Dashboard View Render
     function renderDashboard() {
       const todayStr = new Date().toISOString().split("T")[0];
       const monthStr = todayStr.substring(0, 7);
@@ -749,7 +742,6 @@
       });
     }
 
-    // Transactions Table
     function renderTransactionsTable(filtered = null) {
       const list = filtered || transactionsList;
       const tbody = document.getElementById("all-transactions-body");
@@ -787,7 +779,6 @@
       renderTransactionsTable(filtered);
     }
 
-    // Performance & Analytics Charts
     function renderPerformanceMetrics() {
       const totalTx = transactionsList.length;
       const totalRev = transactionsList.reduce((acc, t) => acc + (Number(t.price) || 0), 0);
@@ -840,7 +831,6 @@
       });
     }
 
-    // Settings & Services Handlers
     function renderServicesSettings() {
       const container = document.getElementById("services-list");
       container.innerHTML = "";
@@ -896,7 +886,6 @@
       showToast("Salon name updated.", "success");
     }
 
-    // Razorpay Live Recurring Subscription Trigger
     function launchRazorpayCheckout() {
       const options = {
         key: RAZORPAY_KEY_ID,
@@ -925,7 +914,6 @@
       rzp.open();
     }
 
-    // Utility Helpers
     function showToast(msg, type = "success") {
       const el = document.getElementById("toast");
       el.className = `toast toast-${type}`;
