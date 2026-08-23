@@ -418,13 +418,8 @@ input:focus-visible, select:focus-visible, button:focus-visible{
 
       <div class="section-sub">Subscription</div>
       <div class="settings-card">
-        <div style="font-size:13px; margin-bottom:10px;" id="subStatusLine">—</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn btn-outline btn-sm" id="expireTrialBtn">Demo: expire trial</button>
-          <button class="btn btn-outline btn-sm" id="resetTrialBtn">Demo: reset to trial</button>
-          <button class="btn btn-danger-outline btn-sm" id="cancelSubBtn">Demo: cancel subscription</button>
-        </div>
-        <div style="font-size:10.5px; color:var(--slate); margin-top:10px; line-height:1.5;">These buttons simulate the trial/billing lifecycle for testing — a real deployment would drive this from actual dates and Razorpay webhooks.</div>
+        <div style="font-size:13px;" id="subStatusLine">—</div>
+        <div style="font-size:10.5px; color:var(--slate); margin-top:8px; line-height:1.5;">Payment gating is switched off for testing — every account has full access. Razorpay billing gets wired in before launch.</div>
       </div>
     </section>
 
@@ -463,12 +458,12 @@ input:focus-visible, select:focus-visible, button:focus-visible{
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6-6 6 6M12 3v14"/><path d="M4 14v5a2 2 0 002 2h12a2 2 0 002-2v-5"/></svg>
       </div>
       <h2 style="font-family:var(--font-display); font-size:21px; margin:0 0 4px;">Welcome to SalonFlow</h2>
-      <p style="font-size:13px; color:var(--slate); margin:0 0 18px; line-height:1.5;">Set up your salon in under a minute. Your 14-day free trial starts the moment you sign up.</p>
+      <p style="font-size:13px; color:var(--slate); margin:0 0 18px; line-height:1.5;">Create your account to start billing customers right away.</p>
       <div class="field"><label>Salon name</label><input type="text" id="onbSalonName" placeholder="e.g. Luxe Salon"></div>
       <div class="field"><label>Email</label><input type="email" id="onbEmail" placeholder="you@example.com"></div>
       <div class="field"><label>Password</label><input type="password" id="onbPassword" placeholder="••••••••"></div>
-      <button class="btn btn-brass" id="onbSubmitBtn">Sign Up &amp; Start Trial</button>
-      <div style="font-size:10.5px; color:var(--slate); margin-top:10px; text-align:center; line-height:1.5;">Prototype note: this simulates Supabase Auth + a 14-day trial, and saves locally to your account's storage — no password is actually verified.</div>
+      <button class="btn btn-brass" id="onbSubmitBtn">Sign Up &amp; Start Using SalonFlow</button>
+      <div style="font-size:10.5px; color:var(--slate); margin-top:10px; text-align:center; line-height:1.5;">Testing mode: no payment required yet — signing up grants full access immediately. Payment gating gets switched back on before launch.</div>
     </div>
   </div>
 
@@ -514,8 +509,8 @@ input:focus-visible, select:focus-visible, button:focus-visible{
       <div class="paywall-icon" style="background:var(--rose); color:#fff;">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
       </div>
-      <h2 style="font-family:var(--font-display); font-size:20px; margin:0 0 4px;">Your trial has ended</h2>
-      <p style="font-size:13px; color:var(--slate); margin:0 0 12px; line-height:1.5;">Subscribe to keep billing customers and viewing your dashboard.</p>
+      <h2 style="font-family:var(--font-display); font-size:20px; margin:0 0 4px;">Subscribe to activate</h2>
+      <p style="font-size:13px; color:var(--slate); margin:0 0 12px; line-height:1.5;">Your account is created, but billing customers and viewing your dashboard needs an active subscription.</p>
       <div class="price-line">₹499<span>/month</span></div>
       <button class="btn btn-brass" id="subscribeBtn" style="margin-top:12px;">Subscribe Now</button>
     </div>
@@ -604,11 +599,16 @@ input:focus-visible, select:focus-visible, button:focus-visible{
 
   function boot(){
     hideOverlay('onboardOverlay');
+    if(salon.subscriptionStatus !== 'active'){
+      // Payment gating is disabled during testing — auto-fix any
+      // account saved before this was turned off.
+      salon.subscriptionStatus = 'active';
+      saveSalonProfile(salon);
+    }
     renderHeader();
     renderDashboard();
     renderServiceDropdown();
     renderSettings();
-    checkPaywall();
     bindTabEvents();
   }
 
@@ -620,34 +620,24 @@ input:focus-visible, select:focus-visible, button:focus-visible{
     if(!name || !email || !pw){ showToast('Please fill in every field'); return; }
 
     const now = new Date();
-    const trialEnds = new Date(now.getTime() + 14*DAY_MS);
 
     salon = {
       name,
       email,
       createdAt: now.toISOString(),
-      trialEndsAt: trialEnds.toISOString(),
-      subscriptionStatus: 'trial',
+      subscriptionStatus: 'active', // testing mode — no payment gate yet
       services: JSON.parse(JSON.stringify(DEFAULT_SERVICES))
     };
     await saveSalonProfile(salon);
     transactions = [];
     await saveTransactions(transactions);
     boot();
-    showToast('Trial started — welcome aboard!');
+    showToast('Account created — welcome aboard!');
   });
 
   // ---------------- header / status ----------------
-  function trialDaysLeft(){
-    if(!salon) return 0;
-    const end = new Date(salon.trialEndsAt);
-    const diff = Math.ceil((end - TODAY())/DAY_MS);
-    return diff;
-  }
   function isLocked(){
-    if(!salon) return false;
-    if(salon.subscriptionStatus === 'active') return false;
-    return trialDaysLeft() <= 0;
+    return false; // payment gating disabled during testing
   }
 
   function renderHeader(){
@@ -655,26 +645,11 @@ input:focus-visible, select:focus-visible, button:focus-visible{
     const pill = document.getElementById('statusPill');
     const text = document.getElementById('statusPillText');
     pill.classList.remove('trial','expired');
-    if(salon.subscriptionStatus === 'active'){
-      text.textContent = 'Active subscription';
-    } else {
-      const d = trialDaysLeft();
-      if(d > 0){
-        pill.classList.add('trial');
-        text.textContent = `Trial · ${d} day${d===1?'':'s'} left`;
-      } else {
-        pill.classList.add('expired');
-        text.textContent = 'Trial expired';
-      }
-    }
+    text.textContent = 'Active';
   }
 
   function checkPaywall(){
-    if(isLocked()){
-      showOverlay('paywallOverlay');
-    } else {
-      hideOverlay('paywallOverlay');
-    }
+    hideOverlay('paywallOverlay'); // payment gating disabled during testing
   }
 
   // ---------------- tabs ----------------
@@ -948,15 +923,8 @@ input:focus-visible, select:focus-visible, button:focus-visible{
       wrap.appendChild(row);
     });
 
-    const d = trialDaysLeft();
     const subLine = document.getElementById('subStatusLine');
-    if(salon.subscriptionStatus === 'active'){
-      subLine.innerHTML = `Status: <strong style="color:var(--sage-dark)">Active</strong> — billed ₹499/month.`;
-    } else if(d > 0){
-      subLine.innerHTML = `Status: <strong style="color:var(--brass-dark)">Trial</strong> — ${d} day${d===1?'':'s'} remaining.`;
-    } else {
-      subLine.innerHTML = `Status: <strong style="color:var(--rose-dark)">Trial expired</strong> — dashboard is locked.`;
-    }
+    subLine.innerHTML = `Status: <strong style="color:var(--sage-dark)">Active</strong> — no charge while testing.`;
   }
 
   document.getElementById('saveSalonNameBtn').addEventListener('click', async ()=>{
@@ -978,29 +946,6 @@ input:focus-visible, select:focus-visible, button:focus-visible{
     document.getElementById('newServicePrice').value = '';
     renderSettings();
     showToast('Service added');
-  });
-
-  // ---- demo lifecycle controls ----
-  document.getElementById('expireTrialBtn').addEventListener('click', async ()=>{
-    salon.trialEndsAt = new Date(Date.now() - DAY_MS).toISOString();
-    salon.subscriptionStatus = 'trial';
-    await saveSalonProfile(salon);
-    renderHeader(); renderSettings(); checkPaywall();
-    showToast('Trial marked as expired');
-  });
-  document.getElementById('resetTrialBtn').addEventListener('click', async ()=>{
-    salon.trialEndsAt = new Date(Date.now() + 14*DAY_MS).toISOString();
-    salon.subscriptionStatus = 'trial';
-    await saveSalonProfile(salon);
-    renderHeader(); renderSettings(); checkPaywall();
-    showToast('Trial reset to 14 days');
-  });
-  document.getElementById('cancelSubBtn').addEventListener('click', async ()=>{
-    salon.subscriptionStatus = 'trial';
-    salon.trialEndsAt = new Date(Date.now() - DAY_MS).toISOString();
-    await saveSalonProfile(salon);
-    renderHeader(); renderSettings(); checkPaywall();
-    showToast('Subscription cancelled');
   });
 
   // ---------------- paywall / razorpay ----------------
