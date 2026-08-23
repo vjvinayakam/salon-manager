@@ -3,25 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Salon Manager Pro</title>
+  <title>SalonFlow — SaaS Management Portal</title>
+  
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   
+  <!-- CDNs: Supabase v2, Razorpay Checkout, Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     :root {
       --bg-main: #f8fafc;
       --bg-card: #ffffff;
       --text-main: #0f172a;
       --text-muted: #64748b;
-      --primary: #c2410c;
+      --primary: #c2410c; /* Warm terracotta */
       --primary-hover: #9a3412;
       --primary-light: #ffedd5;
       --border: #e2e8f0;
       --success: #16a34a;
       --error: #dc2626;
+      --warning: #d97706;
       --radius: 12px;
       --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
       --font-body: 'Plus Jakarta Sans', sans-serif;
       --font-heading: 'Playfair Display', serif;
     }
@@ -29,14 +38,33 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background-color: var(--bg-main); color: var(--text-main); font-family: var(--font-body); line-height: 1.5; -webkit-font-smoothing: antialiased; }
 
-    /* Navbar */
+    /* Modals & Overlays */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.5rem;
+    }
+    .modal-card {
+      background: #ffffff;
+      padding: 2.25rem 2rem;
+      border-radius: var(--radius);
+      max-width: 480px; width: 100%;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+    }
+    .hidden { display: none !important; }
+
+    /* Navigation */
     .navbar { background-color: var(--bg-card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 50; }
     .nav-container { max-width: 1200px; margin: 0 auto; padding: 0.85rem 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
-    .brand { display: flex; align-items: center; gap: 0.5rem; }
+    .brand { display: flex; align-items: center; gap: 0.6rem; }
     .brand-icon { font-size: 1.5rem; }
-    .brand-name { font-family: var(--font-heading); font-size: 1.25rem; font-weight: 700; color: var(--text-main); }
-    .nav-links { display: flex; gap: 0.5rem; overflow-x: auto; }
-    .nav-btn { background: transparent; border: none; font-family: inherit; font-size: 0.9rem; font-weight: 600; color: var(--text-muted); padding: 0.5rem 0.85rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+    .brand-name { font-family: var(--font-heading); font-size: 1.3rem; font-weight: 700; }
+    .nav-links { display: flex; gap: 0.5rem; overflow-x: auto; align-items: center; }
+    .nav-btn { background: transparent; border: none; font-family: inherit; font-size: 0.9rem; font-weight: 600; color: var(--text-muted); padding: 0.5rem 0.85rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
     .nav-btn:hover { background-color: var(--bg-main); color: var(--text-main); }
     .nav-btn.active { background-color: var(--primary-light); color: var(--primary); }
 
@@ -48,14 +76,23 @@
 
     .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
     .page-title { font-family: var(--font-heading); font-size: 1.75rem; color: var(--text-main); }
-    .current-date { color: var(--text-muted); font-size: 0.9rem; }
 
     /* Cards & Metrics */
     .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; box-shadow: var(--shadow-sm); margin-bottom: 1.5rem; }
     .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .metric-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.4rem; box-shadow: var(--shadow-sm); }
+    .metric-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.4rem; }
     .metric-label { font-size: 0.85rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-    .metric-value { font-size: 1.6rem; font-weight: 700; color: var(--text-main); }
+    .metric-value { font-size: 1.6rem; font-weight: 700; }
+
+    /* Forms */
+    .form-group { margin-bottom: 1.25rem; text-align: left; }
+    .form-group label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text-main); }
+    .form-control { width: 100%; padding: 0.7rem 0.85rem; font-family: inherit; font-size: 0.95rem; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+    .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.15); }
+    .input-prefix-group { display: flex; }
+    .input-prefix-group .prefix { padding: 0.7rem 0.85rem; background-color: var(--bg-main); border: 1px solid var(--border); border-right: none; border-radius: 8px 0 0 8px; color: var(--text-muted); font-weight: 600; }
+    .input-prefix-group .form-control { border-radius: 0 8px 8px 0; }
+    .error-text { color: var(--error); font-size: 0.8rem; margin-top: 0.3rem; display: block; }
 
     /* Buttons */
     .btn { font-family: inherit; font-weight: 600; font-size: 0.95rem; padding: 0.65rem 1.25rem; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; }
@@ -64,51 +101,103 @@
     .btn-secondary { background-color: var(--bg-main); color: var(--text-main); border: 1px solid var(--border); }
     .btn-secondary:hover { background-color: #e2e8f0; }
     .btn-block { width: 100%; }
-    .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
     .btn-link { background: none; border: none; color: var(--primary); font-weight: 600; cursor: pointer; }
 
-    /* Forms */
-    .form-container { max-width: 520px; margin: 0 auto; }
-    .card-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; }
-    .card-subtitle { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
-    .form-group { margin-bottom: 1.25rem; }
-    .form-group label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text-main); }
-    .form-control { width: 100%; padding: 0.7rem 0.85rem; font-family: inherit; font-size: 0.95rem; border: 1px solid var(--border); border-radius: 8px; background-color: #ffffff; color: var(--text-main); }
-    .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.15); }
-    .input-prefix-group { display: flex; align-items: center; }
-    .input-prefix-group .prefix { padding: 0.7rem 0.85rem; background-color: var(--bg-main); border: 1px solid var(--border); border-right: none; border-top-left-radius: 8px; border-bottom-left-radius: 8px; color: var(--text-muted); font-weight: 600; }
-    .input-prefix-group .form-control { border-top-left-radius: 0; border-bottom-left-radius: 0; }
-    .error-text { color: var(--error); font-size: 0.8rem; margin-top: 0.25rem; display: block; }
-
-    /* Table */
+    /* Tables */
     .table-responsive { overflow-x: auto; }
     .data-table { width: 100%; border-collapse: collapse; text-align: left; }
     .data-table th { padding: 0.75rem 1rem; background: var(--bg-main); font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; border-bottom: 1px solid var(--border); }
     .data-table td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
     .badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
     .badge-success { background-color: #dcfce7; color: #15803d; }
+    .badge-warning { background-color: #fef3c7; color: #b45309; }
 
-    /* Settings */
-    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem; }
-    .service-item-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
-    .add-service-inline { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
-    .divider { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
-    .helper-text { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+    /* Charts & Grids */
+    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
+    .chart-box { position: relative; height: 260px; width: 100%; }
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; }
+    .service-row { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.85rem 1.25rem; border-radius: 8px; color: #fff; font-weight: 500; font-size: 0.9rem; z-index: 9999; box-shadow: var(--shadow-lg); animation: slideIn 0.2s ease; }
+    .toast-success { background-color: var(--success); }
+    .toast-error { background-color: var(--error); }
+    @keyframes slideIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
     @media (max-width: 640px) {
+      .charts-grid, .settings-grid { grid-template-columns: 1fr; }
       .nav-links { width: 100%; justify-content: space-between; }
-      .settings-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Navigation -->
+  <!-- Toast Container -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- 1. AUTH MODAL (Login / Signup) -->
+  <div id="auth-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">✂️</div>
+      <h2 style="font-family: var(--font-heading); margin-bottom: 0.25rem;">Welcome to SalonFlow</h2>
+      <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">Sign in or register your salon to start your 14-day free trial.</p>
+
+      <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+        <div class="form-group" id="group-salon-name">
+          <label>Salon Business Name</label>
+          <input type="text" id="auth-salon-name" class="form-control" placeholder="e.g. Naturals Lounge" />
+        </div>
+
+        <div class="form-group">
+          <label>Owner Email Address</label>
+          <input type="email" id="auth-email" class="form-control" placeholder="owner@gmail.com" required />
+        </div>
+
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="auth-password" class="form-control" placeholder="••••••••" required minlength="6" />
+          <small class="error-text" id="auth-error"></small>
+        </div>
+
+        <button type="submit" id="btn-auth-submit" class="btn btn-primary btn-block">Sign Up & Start Trial</button>
+      </form>
+
+      <p style="margin-top: 1.25rem; font-size: 0.85rem; color: var(--text-muted);">
+        <span id="auth-switch-prompt">Already have an account?</span> 
+        <a href="#" class="btn-link" onclick="toggleAuthMode(event)" id="auth-switch-btn">Sign In</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- 2. SUBSCRIPTION PAYWALL MODAL (Triggered when trial expires) -->
+  <div id="paywall-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔒</div>
+      <h2 style="font-family: var(--font-heading); margin-bottom: 0.25rem;">Trial Period Expired</h2>
+      <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">Subscribe to SalonFlow Pro to continue recording transactions and sending automated WhatsApp receipts.</p>
+      
+      <div style="background: var(--bg-main); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; text-align: left;">
+        <h3 style="font-size: 1.1rem; font-weight: 700;">SalonFlow Pro Plan</h3>
+        <p style="font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0.25rem 0;">₹499 <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 400;">/ month</span></p>
+        <ul style="font-size: 0.85rem; color: var(--text-muted); margin-left: 1.2rem; margin-top: 0.5rem;">
+          <li>Unlimited walk-in customers</li>
+          <li>Instant WhatsApp Invoicing</li>
+          <li>Daily & Monthly Revenue Tracking</li>
+        </ul>
+      </div>
+
+      <button class="btn btn-primary btn-block" onclick="launchRazorpayCheckout()">Subscribe with UPI / Card</button>
+      <button class="btn btn-secondary btn-block" style="margin-top: 0.5rem;" onclick="handleSignOut()">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- Navbar -->
   <nav class="navbar">
     <div class="nav-container">
       <div class="brand">
         <span class="brand-icon">✂️</span>
-        <span class="brand-name" id="nav-salon-name">Luxe Salon</span>
+        <span class="brand-name" id="nav-salon-name">SalonFlow</span>
       </div>
       <div class="nav-links">
         <button class="nav-btn active" data-view="dashboard">Dashboard</button>
@@ -116,11 +205,12 @@
         <button class="nav-btn" data-view="performance">Performance</button>
         <button class="nav-btn" data-view="transactions">Transactions</button>
         <button class="nav-btn" data-view="settings">Settings</button>
+        <button class="btn btn-secondary btn-sm" onclick="handleSignOut()">Log Out</button>
       </div>
     </div>
   </nav>
 
-  <!-- Content -->
+  <!-- Main Container -->
   <main class="main-content">
     
     <!-- View 1: Dashboard -->
@@ -128,9 +218,9 @@
       <div class="section-header">
         <div>
           <h1 class="page-title">Salon Dashboard</h1>
-          <p class="current-date" id="dashboard-date">Today</p>
+          <p id="dashboard-date" style="color: var(--text-muted); font-size: 0.9rem;">Today</p>
         </div>
-        <button class="btn btn-primary" id="btn-quick-add">+ Add Customer</button>
+        <button class="btn btn-primary" onclick="switchView('add-customer')">+ Add Customer</button>
       </div>
 
       <div class="metrics-grid">
@@ -143,26 +233,20 @@
           <span class="metric-value" id="dash-month-rev">₹0</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">This Year</span>
-          <span class="metric-value" id="dash-year-rev">₹0</span>
+          <span class="metric-label">Total Transactions</span>
+          <span class="metric-value" id="dash-total-tx">0</span>
         </div>
       </div>
 
       <div class="card">
         <div class="section-header" style="margin-bottom: 1rem;">
-          <h2 class="card-title">Recent Transactions</h2>
-          <button class="btn-link" id="btn-view-all-tx">View All →</button>
+          <h2 style="font-size: 1.25rem; font-weight: 700;">Recent Transactions</h2>
+          <button class="btn-link" onclick="switchView('transactions')">View All →</button>
         </div>
         <div class="table-responsive">
           <table class="data-table">
             <thead>
-              <tr>
-                <th>Customer</th>
-                <th>Service</th>
-                <th>Price</th>
-                <th>Date</th>
-                <th>WhatsApp</th>
-              </tr>
+              <tr><th>Customer</th><th>Service</th><th>Price</th><th>Time</th><th>WhatsApp</th></tr>
             </thead>
             <tbody id="dashboard-tx-body"></tbody>
           </table>
@@ -172,48 +256,45 @@
 
     <!-- View 2: Add Customer Form -->
     <section id="view-add-customer" class="view">
-      <div class="form-container card">
-        <h2 class="card-title">Add Customer</h2>
-        <p class="card-subtitle">Saves transaction and opens personal WhatsApp to send invoice.</p>
+      <div class="card" style="max-width: 520px; margin: 0 auto;">
+        <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem;">Add Customer</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Saves to Supabase and opens WhatsApp to send the receipt.</p>
 
-        <form id="add-customer-form" novalidate>
+        <form id="customer-form" onsubmit="handleCustomerSubmit(event)" novalidate>
           <div class="form-group">
-            <label for="cust-name">Customer Name *</label>
-            <input type="text" id="cust-name" class="form-control" placeholder="Enter customer name" required />
+            <label>Customer Name *</label>
+            <input type="text" id="cust-name" class="form-control" placeholder="Enter name" required />
             <small class="error-text" id="cust-name-error"></small>
           </div>
 
           <div class="form-group">
-            <label for="cust-phone">Phone Number (WhatsApp) *</label>
+            <label>WhatsApp Number *</label>
             <div class="input-prefix-group">
               <span class="prefix">+91</span>
-              <input type="tel" id="cust-phone" class="form-control" placeholder="10-digit mobile number" maxlength="10" required />
+              <input type="tel" id="cust-phone" class="form-control" placeholder="10-digit number" maxlength="10" required />
             </div>
             <small class="error-text" id="cust-phone-error"></small>
           </div>
 
           <div class="form-group">
-            <label for="cust-service">Service *</label>
-            <select id="cust-service" class="form-control" required></select>
+            <label>Service *</label>
+            <select id="cust-service" class="form-control" onchange="handleServiceSelectChange(this.value)"></select>
           </div>
 
           <div class="form-group">
-            <label for="cust-price">Price (₹) *</label>
+            <label>Price (₹) *</label>
             <div class="input-prefix-group">
               <span class="prefix">₹</span>
-              <input type="number" id="cust-price" class="form-control" placeholder="Enter price" min="1" required />
+              <input type="number" id="cust-price" class="form-control" min="1" required />
             </div>
-            <small class="error-text" id="cust-price-error"></small>
           </div>
 
-          <button type="submit" id="submit-btn" class="btn btn-primary btn-block">
-            Send & Save
-          </button>
+          <button type="submit" id="btn-submit-tx" class="btn btn-primary btn-block">Send & Save</button>
         </form>
       </div>
     </section>
 
-    <!-- View 3: Performance -->
+    <!-- View 3: Performance & Analytics -->
     <section id="view-performance" class="view">
       <div class="section-header">
         <h1 class="page-title">Performance Analytics</h1>
@@ -221,43 +302,43 @@
 
       <div class="metrics-grid">
         <div class="metric-card">
-          <span class="metric-label">Total Customers</span>
-          <span class="metric-value" id="perf-total-customers">0</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">Total Transactions</span>
-          <span class="metric-value" id="perf-total-tx">0</span>
+          <span class="metric-label">Unique Customers</span>
+          <span class="metric-value" id="perf-unique-cust">0</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">Avg Transaction</span>
           <span class="metric-value" id="perf-avg-tx">₹0</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Top Service</span>
-          <span class="metric-value" id="perf-popular-service">-</span>
+          <span class="metric-label">Most Popular Service</span>
+          <span class="metric-value" id="perf-pop-service">-</span>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem;">Monthly Revenue</h3>
+          <div class="chart-box"><canvas id="chartMonthly"></canvas></div>
+        </div>
+        <div class="card">
+          <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem;">Service Breakdown</h3>
+          <div class="chart-box"><canvas id="chartServices"></canvas></div>
         </div>
       </div>
     </section>
 
-    <!-- View 4: Transactions List -->
+    <!-- View 4: Transactions -->
     <section id="view-transactions" class="view">
       <div class="section-header">
         <h1 class="page-title">All Transactions</h1>
-        <input type="text" id="tx-search" class="form-control" style="max-width: 300px;" placeholder="Search customer or phone..." />
+        <input type="text" id="tx-search-input" class="form-control" style="max-width: 280px;" placeholder="Search by customer or phone..." oninput="filterTransactions(this.value)" />
       </div>
 
       <div class="card">
         <div class="table-responsive">
           <table class="data-table">
             <thead>
-              <tr>
-                <th>Customer</th>
-                <th>Phone</th>
-                <th>Service</th>
-                <th>Price</th>
-                <th>Date & Time</th>
-                <th>Action</th>
-              </tr>
+              <tr><th>Customer</th><th>Phone</th><th>Service</th><th>Price</th><th>Date & Time</th><th>WhatsApp</th></tr>
             </thead>
             <tbody id="all-transactions-body"></tbody>
           </table>
@@ -268,22 +349,32 @@
     <!-- View 5: Settings -->
     <section id="view-settings" class="view">
       <div class="settings-grid">
+        <!-- Profile & Subscription -->
         <div class="card">
-          <h2 class="card-title">Salon Profile</h2>
+          <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem;">Salon & Subscription</h2>
           <div class="form-group">
             <label>Salon Name</label>
             <input type="text" id="set-salon-name" class="form-control" />
           </div>
-          <button class="btn btn-primary" id="btn-save-profile">Save Name</button>
+          <button class="btn btn-primary" onclick="saveSalonProfile()">Update Name</button>
+
+          <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border);" />
+
+          <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">Subscription Status</h3>
+          <p style="font-size: 0.9rem;">Plan: <strong id="info-sub-plan">14-Day Free Trial</strong></p>
+          <p style="font-size: 0.9rem; margin-bottom: 1rem;">Status: <span id="info-sub-status" class="badge badge-success">Active</span></p>
+          <button class="btn btn-secondary btn-sm" onclick="launchRazorpayCheckout()">Manage / Renew Subscription</button>
         </div>
 
+        <!-- Manage Services -->
         <div class="card">
-          <h2 class="card-title">Manage Services</h2>
-          <div id="service-list" style="margin-bottom: 1rem;"></div>
-          <div class="add-service-inline">
-            <input type="text" id="new-service-name" class="form-control" placeholder="Service name" />
-            <input type="number" id="new-service-price" class="form-control" placeholder="Price" />
-            <button class="btn btn-secondary" id="btn-add-service">Add</button>
+          <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem;">Services Menu</h2>
+          <div id="services-list" style="margin-bottom: 1rem;"></div>
+
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="new-srv-name" class="form-control" placeholder="Service name" />
+            <input type="number" id="new-srv-price" class="form-control" placeholder="₹" style="max-width: 90px;" />
+            <button class="btn btn-secondary" onclick="addNewService()">Add</button>
           </div>
         </div>
       </div>
@@ -292,276 +383,526 @@
   </main>
 
   <script>
-    // Configuration & State
+    /**
+     * SUPABASE & RAZORPAY CONFIGURATION
+     * Replace with your public Supabase credentials and Razorpay Key ID
+     */
+    const SUPABASE_URL = "https://YOUR_SUPABASE_PROJECT_ID.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+    const RAZORPAY_KEY_ID = "rzp_test_YOUR_KEY_ID";
+
+    // Initialize Supabase Client (v2)
+    const supabase = (SUPABASE_URL.includes("YOUR_SUPABASE") || typeof window.supabase === "undefined") 
+      ? null 
+      : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // SaaS Application State
+    let authMode = "signup"; // 'signup' | 'signin'
+    let currentUser = null;
+    let currentSalon = null;
+    let salonServices = [];
+    let transactionsList = [];
+    let chartMonthlyInstance = null;
+    let chartServiceInstance = null;
+
+    // Default Services for New Salons
     const DEFAULT_SERVICES = [
       { name: "Hair Cut", price: 300 },
-      { name: "Beard", price: 200 },
+      { name: "Beard Trim", price: 200 },
       { name: "Hair Cut + Shave", price: 450 },
       { name: "Facial", price: 800 },
       { name: "Hair Dye", price: 1200 }
     ];
 
-    let state = {
-      salonName: localStorage.getItem("SALON_NAME") || "Luxe Salon",
-      services: JSON.parse(localStorage.getItem("SALON_SERVICES")) || DEFAULT_SERVICES,
-      transactions: JSON.parse(localStorage.getItem("SALON_TX")) || []
-    };
+    // App Initialization
+    document.addEventListener("DOMContentLoaded", async () => {
+      initNavigation();
+      document.getElementById("dashboard-date").innerText = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
 
-    function saveState() {
-      localStorage.setItem("SALON_NAME", state.salonName);
-      localStorage.setItem("SALON_SERVICES", JSON.stringify(state.services));
-      localStorage.setItem("SALON_TX", JSON.stringify(state.transactions));
+      // Check Active Supabase Session
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          currentUser = session.user;
+          await loadSalonData();
+        } else {
+          showAuthModal();
+        }
+      } else {
+        // Offline / Demo Mode fallback
+        loadDemoMode();
+      }
+    });
+
+    // Authentication Handlers
+    function showAuthModal() {
+      document.getElementById("auth-modal").classList.remove("hidden");
     }
 
-    // View Routing
+    function toggleAuthMode(e) {
+      e.preventDefault();
+      authMode = authMode === "signup" ? "signin" : "signup";
+      const isSignup = authMode === "signup";
+
+      document.getElementById("group-salon-name").style.display = isSignup ? "block" : "none";
+      document.getElementById("btn-auth-submit").innerText = isSignup ? "Sign Up & Start Trial" : "Sign In";
+      document.getElementById("auth-switch-prompt").innerText = isSignup ? "Already have an account?" : "Don't have an account?";
+      document.getElementById("auth-switch-btn").innerText = isSignup ? "Sign In" : "Sign Up";
+      document.getElementById("auth-error").innerText = "";
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById("auth-email").value.trim();
+      const password = document.getElementById("auth-password").value.trim();
+      const salonName = document.getElementById("auth-salon-name").value.trim();
+      const errEl = document.getElementById("auth-error");
+      const btn = document.getElementById("btn-auth-submit");
+
+      errEl.innerText = "";
+      btn.innerText = "Processing...";
+
+      try {
+        if (!supabase) {
+          // Demo Mode Login
+          currentUser = { id: "demo-user", email };
+          currentSalon = { id: "demo-salon", salon_name: salonName || "Luxe Salon", subscription_status: "trial", trial_ends_at: new Date(Date.now() + 14*86400000) };
+          salonServices = [...DEFAULT_SERVICES];
+          document.getElementById("auth-modal").classList.add("hidden");
+          renderAllViews();
+          return;
+        }
+
+        if (authMode === "signup") {
+          const { data, error } = await supabase.auth.signUp({ email, password });
+          if (error) throw error;
+          currentUser = data.user;
+
+          // Create Salon Profile in Supabase
+          const { data: salonData, error: sErr } = await supabase
+            .from("salons")
+            .insert([{ owner_id: currentUser.id, salon_name: salonName || "My Salon", owner_phone: "" }])
+            .select()
+            .single();
+          
+          if (sErr) throw sErr;
+          currentSalon = salonData;
+
+          // Seed Default Services
+          const seeded = DEFAULT_SERVICES.map(s => ({ salon_id: currentSalon.id, name: s.name, price: s.price }));
+          await supabase.from("services").insert(seeded);
+          
+          await loadSalonData();
+        } else {
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+          currentUser = data.user;
+          await loadSalonData();
+        }
+
+        document.getElementById("auth-modal").classList.add("hidden");
+        showToast("Signed in successfully!", "success");
+      } catch (err) {
+        errEl.innerText = err.message || "Authentication failed.";
+      } finally {
+        btn.innerText = authMode === "signup" ? "Sign Up & Start Trial" : "Sign In";
+      }
+    }
+
+    async function handleSignOut() {
+      if (supabase) await supabase.auth.signOut();
+      localStorage.clear();
+      location.reload();
+    }
+
+    // Data Syncing with Supabase
+    async function loadSalonData() {
+      if (!supabase || !currentUser) return;
+
+      // 1. Fetch Salon Details
+      const { data: salon } = await supabase.from("salons").select("*").eq("owner_id", currentUser.id).single();
+      currentSalon = salon;
+
+      // 2. Paywall Check
+      if (currentSalon) {
+        const isTrialActive = new Date(currentSalon.trial_ends_at) > new Date();
+        const isPaid = currentSalon.subscription_status === "active";
+        if (!isTrialActive && !isPaid) {
+          document.getElementById("paywall-modal").classList.remove("hidden");
+          return;
+        }
+      }
+
+      // 3. Fetch Services
+      const { data: srvs } = await supabase.from("services").select("*").eq("salon_id", currentSalon.id).eq("is_active", true);
+      salonServices = srvs || [];
+
+      // 4. Fetch Transactions
+      const { data: txs } = await supabase.from("transactions").select("*").eq("salon_id", currentSalon.id).order("created_at", { ascending: false });
+      transactionsList = txs || [];
+
+      renderAllViews();
+    }
+
+    function renderAllViews() {
+      if (currentSalon) {
+        document.getElementById("nav-salon-name").innerText = currentSalon.salon_name;
+        document.getElementById("set-salon-name").value = currentSalon.salon_name;
+      }
+      populateServiceDropdown();
+      renderDashboard();
+      renderTransactionsTable();
+      renderPerformanceMetrics();
+      renderServicesSettings();
+    }
+
+    // Navigation Switcher
+    function initNavigation() {
+      document.querySelectorAll(".nav-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          switchView(btn.getAttribute("data-view"));
+        });
+      });
+    }
+
     function switchView(viewName) {
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
       
-      const target = document.getElementById("view-" + viewName);
+      const target = document.getElementById(`view-${viewName}`);
       const btn = document.querySelector(`.nav-btn[data-view="${viewName}"]`);
       if (target) target.classList.add("active");
       if (btn) btn.classList.add("active");
 
-      if (viewName === "dashboard") renderDashboard();
-      if (viewName === "transactions") renderTransactions();
-      if (viewName === "performance") renderPerformance();
-      if (viewName === "settings") renderSettings();
+      if (viewName === "performance") renderCharts();
     }
 
-    // Services Dropdown
-    function populateServices() {
+    // Transaction & Billing Handlers
+    function populateServiceDropdown() {
       const select = document.getElementById("cust-service");
       select.innerHTML = "";
-      state.services.forEach(s => {
+      salonServices.forEach(s => {
         const opt = document.createElement("option");
         opt.value = s.name;
         opt.textContent = `${s.name} (₹${s.price})`;
         select.appendChild(opt);
       });
-
-      if (state.services.length > 0) {
-        document.getElementById("cust-price").value = state.services[0].price;
+      if (salonServices.length > 0) {
+        document.getElementById("cust-price").value = salonServices[0].price;
       }
     }
 
-    // Form Handling
-    function setupForm() {
-      const select = document.getElementById("cust-service");
-      select.addEventListener("change", (e) => {
-        const item = state.services.find(s => s.name === e.target.value);
-        if (item) document.getElementById("cust-price").value = item.price;
-      });
-
-      const form = document.getElementById("add-customer-form");
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-
-        const nameInput = document.getElementById("cust-name");
-        const phoneInput = document.getElementById("cust-phone");
-        const priceInput = document.getElementById("cust-price");
-        const serviceInput = document.getElementById("cust-service");
-
-        const nameVal = nameInput.value.trim();
-        const phoneVal = phoneInput.value.trim().replace(/\D/g, "");
-        const priceVal = Number(priceInput.value);
-
-        let valid = true;
-        document.getElementById("cust-name-error").innerText = "";
-        document.getElementById("cust-phone-error").innerText = "";
-        document.getElementById("cust-price-error").innerText = "";
-
-        if (!nameVal) {
-          document.getElementById("cust-name-error").innerText = "Name is required";
-          valid = false;
-        }
-        if (!phoneVal || phoneVal.length !== 10) {
-          document.getElementById("cust-phone-error").innerText = "Enter valid 10-digit number";
-          valid = false;
-        }
-        if (!priceVal || priceVal <= 0) {
-          document.getElementById("cust-price-error").innerText = "Enter valid price";
-          valid = false;
-        }
-
-        if (!valid) return;
-
-        const now = new Date();
-        const tx = {
-          id: Date.now(),
-          customer_name: nameVal,
-          phone: phoneVal,
-          service: serviceInput.value,
-          price: priceVal,
-          date: now.toISOString().split("T")[0],
-          time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-
-        state.transactions.unshift(tx);
-        saveState();
-
-        // Clear Form
-        nameInput.value = "";
-        phoneInput.value = "";
-
-        // WhatsApp Direct Link
-        const msg = encodeURIComponent(
-          `Hi ${tx.customer_name} 👋\nThank you for visiting ${state.salonName}.\n\nService: ${tx.service}\nAmount: ₹${tx.price}\n\nThank you for choosing us!\n— ${state.salonName}`
-        );
-        
-        window.location.href = `https://api.whatsapp.com/send?phone=91${tx.phone}&text=${msg}`;
-      });
+    function handleServiceSelectChange(name) {
+      const s = salonServices.find(item => item.name === name);
+      if (s) document.getElementById("cust-price").value = s.price;
     }
 
-    // Dashboard View
-    function renderDashboard() {
-      const today = new Date().toISOString().split("T")[0];
-      const thisMonth = today.substring(0, 7);
-      const thisYear = today.substring(0, 4);
+    async function handleCustomerSubmit(e) {
+      e.preventDefault();
+      const nameInput = document.getElementById("cust-name");
+      const phoneInput = document.getElementById("cust-phone");
+      const serviceInput = document.getElementById("cust-service");
+      const priceInput = document.getElementById("cust-price");
 
-      let tRev = 0, mRev = 0, yRev = 0;
-      state.transactions.forEach(t => {
+      const name = nameInput.value.trim();
+      const phone = phoneInput.value.trim().replace(/\D/g, "");
+      const price = Number(priceInput.value);
+
+      document.getElementById("cust-name-error").innerText = "";
+      document.getElementById("cust-phone-error").innerText = "";
+
+      if (!name) {
+        document.getElementById("cust-name-error").innerText = "Customer name is required.";
+        return;
+      }
+      if (phone.length !== 10) {
+        document.getElementById("cust-phone-error").innerText = "Enter a valid 10-digit Indian number.";
+        return;
+      }
+
+      const txPayload = {
+        salon_id: currentSalon ? currentSalon.id : "demo",
+        customer_name: name,
+        customer_phone: phone,
+        service_name: serviceInput.value,
+        price: price,
+        payment_mode: "Cash",
+        whatsapp_status: "Sent"
+      };
+
+      // 1. Insert into Supabase
+      if (supabase && currentSalon) {
+        const { data, error } = await supabase.from("transactions").insert([txPayload]).select().single();
+        if (error) {
+          showToast("Database error: " + error.message, "error");
+          return;
+        }
+        transactionsList.unshift(data);
+      } else {
+        txPayload.created_at = new Date().toISOString();
+        transactionsList.unshift(txPayload);
+      }
+
+      // 2. Reset form
+      nameInput.value = "";
+      phoneInput.value = "";
+      renderDashboard();
+      renderTransactionsTable();
+
+      // 3. Dispatch WhatsApp Message directly
+      const salonName = currentSalon ? currentSalon.salon_name : "Our Salon";
+      const message = encodeURIComponent(
+        `Hi ${txPayload.customer_name} 👋\nThank you for visiting ${salonName}.\n\nService: ${txPayload.service_name}\nAmount: ₹${txPayload.price}\n\nThank you for choosing us!\n— ${salonName}`
+      );
+      
+      window.location.href = `https://api.whatsapp.com/send?phone=91${txPayload.customer_phone}&text=${message}`;
+    }
+
+    // Dashboard View Render
+    function renderDashboard() {
+      const todayStr = new Date().toISOString().split("T")[0];
+      const monthStr = todayStr.substring(0, 7);
+
+      let tRev = 0, mRev = 0;
+      transactionsList.forEach(t => {
+        const d = (t.created_at || "").split("T")[0];
         const p = Number(t.price) || 0;
-        if (t.date === today) tRev += p;
-        if (t.date && t.date.startsWith(thisMonth)) mRev += p;
-        if (t.date && t.date.startsWith(thisYear)) yRev += p;
+        if (d === todayStr) tRev += p;
+        if (d.startsWith(monthStr)) mRev += p;
       });
 
       document.getElementById("dash-today-rev").innerText = `₹${tRev.toLocaleString('en-IN')}`;
       document.getElementById("dash-month-rev").innerText = `₹${mRev.toLocaleString('en-IN')}`;
-      document.getElementById("dash-year-rev").innerText = `₹${yRev.toLocaleString('en-IN')}`;
+      document.getElementById("dash-total-tx").innerText = transactionsList.length;
 
       const tbody = document.getElementById("dashboard-tx-body");
       tbody.innerHTML = "";
-      state.transactions.slice(0, 5).forEach(t => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td><strong>${escapeHtml(t.customer_name)}</strong></td>
-          <td>${escapeHtml(t.service)}</td>
-          <td>₹${t.price}</td>
-          <td>${t.date}</td>
-          <td><span class="badge badge-success">Sent</span></td>
-        `;
-        tbody.appendChild(tr);
+      transactionsList.slice(0, 5).forEach(t => {
+        const time = new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${escapeHtml(t.customer_name)}</strong></td>
+            <td>${escapeHtml(t.service_name)}</td>
+            <td>₹${t.price}</td>
+            <td>${time}</td>
+            <td><span class="badge badge-success">Sent</span></td>
+          </tr>`;
       });
     }
 
     // Transactions Table
-    function renderTransactions(filterText = "") {
+    function renderTransactionsTable(filtered = null) {
+      const list = filtered || transactionsList;
       const tbody = document.getElementById("all-transactions-body");
       tbody.innerHTML = "";
 
-      const filtered = state.transactions.filter(t => 
-        t.customer_name.toLowerCase().includes(filterText.toLowerCase()) || 
-        t.phone.includes(filterText)
-      );
-
-      if (filtered.length === 0) {
+      if (list.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No records found.</td></tr>`;
         return;
       }
 
-      filtered.forEach(t => {
-        const tr = document.createElement("tr");
-        const msg = encodeURIComponent(`Hi ${t.customer_name} 👋\nThank you for visiting ${state.salonName}.\nAmount: ₹${t.price}`);
-        tr.innerHTML = `
-          <td><strong>${escapeHtml(t.customer_name)}</strong></td>
-          <td>+91 ${t.phone}</td>
-          <td>${escapeHtml(t.service)}</td>
-          <td>₹${t.price}</td>
-          <td>${t.date} ${t.time || ""}</td>
-          <td><a href="https://api.whatsapp.com/send?phone=91${t.phone}&text=${msg}" target="_blank" class="btn-link">WhatsApp ↗</a></td>
-        `;
-        tbody.appendChild(tr);
+      list.forEach(t => {
+        const dateStr = new Date(t.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        const timeStr = new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const salonTitle = currentSalon ? currentSalon.salon_name : "Salon";
+        const msg = encodeURIComponent(`Hi ${t.customer_name} 👋\nThank you for visiting ${salonTitle}.\nAmount: ₹${t.price}`);
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${escapeHtml(t.customer_name)}</strong></td>
+            <td>+91 ${t.customer_phone}</td>
+            <td>${escapeHtml(t.service_name)}</td>
+            <td>₹${t.price}</td>
+            <td>${dateStr} <small style="color:var(--text-muted)">${timeStr}</small></td>
+            <td><a href="https://api.whatsapp.com/send?phone=91${t.customer_phone}&text=${msg}" target="_blank" class="btn-link">Resend ↗</a></td>
+          </tr>`;
       });
     }
 
-    // Performance View
-    function renderPerformance() {
-      const totalTx = state.transactions.length;
-      const totalRev = state.transactions.reduce((acc, t) => acc + (Number(t.price) || 0), 0);
-      const customers = new Set(state.transactions.map(t => t.phone)).size;
+    function filterTransactions(q) {
+      const query = q.toLowerCase();
+      const filtered = transactionsList.filter(t => 
+        t.customer_name.toLowerCase().includes(query) || 
+        t.customer_phone.includes(query) || 
+        t.service_name.toLowerCase().includes(query)
+      );
+      renderTransactionsTable(filtered);
+    }
+
+    // Performance & Analytics Charts
+    function renderPerformanceMetrics() {
+      const totalTx = transactionsList.length;
+      const totalRev = transactionsList.reduce((acc, t) => acc + (Number(t.price) || 0), 0);
+      const uniqueCust = new Set(transactionsList.map(t => t.customer_phone)).size;
       const avg = totalTx > 0 ? Math.round(totalRev / totalTx) : 0;
 
-      document.getElementById("perf-total-customers").innerText = customers;
-      document.getElementById("perf-total-tx").innerText = totalTx;
+      document.getElementById("perf-unique-cust").innerText = uniqueCust;
       document.getElementById("perf-avg-tx").innerText = `₹${avg.toLocaleString('en-IN')}`;
 
-      const counts = {};
-      state.transactions.forEach(t => counts[t.service] = (counts[t.service] || 0) + 1);
-      let topService = "-";
+      const sCounts = {};
+      transactionsList.forEach(t => sCounts[t.service_name] = (sCounts[t.service_name] || 0) + 1);
+      let pop = "-";
       let max = 0;
-      for (let s in counts) {
-        if (counts[s] > max) { max = counts[s]; topService = s; }
+      for (let s in sCounts) {
+        if (sCounts[s] > max) { max = sCounts[s]; pop = s; }
       }
-      document.getElementById("perf-popular-service").innerText = topService;
+      document.getElementById("perf-pop-service").innerText = pop;
     }
 
-    // Settings View
-    function renderSettings() {
-      document.getElementById("set-salon-name").value = state.salonName;
-      const list = document.getElementById("service-list");
-      list.innerHTML = "";
-      state.services.forEach((s, idx) => {
-        const row = document.createElement("div");
-        row.className = "service-item-row";
-        row.innerHTML = `
-          <span><strong>${escapeHtml(s.name)}</strong> — ₹${s.price}</span>
-          <button class="btn btn-secondary btn-sm" onclick="deleteService(${idx})">Delete</button>
-        `;
-        list.appendChild(row);
+    function renderCharts() {
+      if (typeof Chart === "undefined") return;
+
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const mData = new Array(12).fill(0);
+      transactionsList.forEach(t => {
+        if (t.created_at) {
+          const idx = new Date(t.created_at).getMonth();
+          mData[idx] += Number(t.price) || 0;
+        }
+      });
+
+      const ctxM = document.getElementById("chartMonthly").getContext("2d");
+      if (chartMonthlyInstance) chartMonthlyInstance.destroy();
+      chartMonthlyInstance = new Chart(ctxM, {
+        type: 'bar',
+        data: { labels: months, datasets: [{ data: mData, backgroundColor: '#c2410c', borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+
+      const sMap = {};
+      salonServices.forEach(s => sMap[s.name] = 0);
+      transactionsList.forEach(t => sMap[t.service_name] = (sMap[t.service_name] || 0) + (Number(t.price) || 0));
+
+      const ctxS = document.getElementById("chartServices").getContext("2d");
+      if (chartServiceInstance) chartServiceInstance.destroy();
+      chartServiceInstance = new Chart(ctxS, {
+        type: 'doughnut',
+        data: { labels: Object.keys(sMap), datasets: [{ data: Object.values(sMap), backgroundColor: ['#c2410c', '#0f766e', '#d97706', '#2563eb', '#7c3aed'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
       });
     }
 
-    window.deleteService = function(idx) {
-      state.services.splice(idx, 1);
-      saveState();
-      renderSettings();
-      populateServices();
-    };
+    // Settings & Services Handlers
+    function renderServicesSettings() {
+      const container = document.getElementById("services-list");
+      container.innerHTML = "";
+      salonServices.forEach((s, idx) => {
+        container.innerHTML += `
+          <div class="service-row">
+            <span><strong>${escapeHtml(s.name)}</strong> — ₹${s.price}</span>
+            <button class="btn btn-secondary btn-sm" onclick="removeService(${idx})">Delete</button>
+          </div>`;
+      });
+    }
+
+    async function addNewService() {
+      const nameEl = document.getElementById("new-srv-name");
+      const priceEl = document.getElementById("new-srv-price");
+      const name = nameEl.value.trim();
+      const price = Number(priceEl.value);
+
+      if (!name || price <= 0) return;
+
+      if (supabase && currentSalon) {
+        const { data, error } = await supabase.from("services").insert([{ salon_id: currentSalon.id, name, price }]).select().single();
+        if (!error && data) salonServices.push(data);
+      } else {
+        salonServices.push({ name, price });
+      }
+
+      nameEl.value = "";
+      priceEl.value = "";
+      renderServicesSettings();
+      populateServiceDropdown();
+      showToast("Service added.", "success");
+    }
+
+    async function removeService(idx) {
+      const s = salonServices[idx];
+      if (supabase && s.id) {
+        await supabase.from("services").update({ is_active: false }).eq("id", s.id);
+      }
+      salonServices.splice(idx, 1);
+      renderServicesSettings();
+      populateServiceDropdown();
+    }
+
+    async function saveSalonProfile() {
+      const name = document.getElementById("set-salon-name").value.trim();
+      if (!name) return;
+      if (supabase && currentSalon) {
+        await supabase.from("salons").update({ salon_name: name }).eq("id", currentSalon.id);
+      }
+      currentSalon.salon_name = name;
+      document.getElementById("nav-salon-name").innerText = name;
+      showToast("Salon name updated.", "success");
+    }
+
+    // Razorpay Recurring Subscription Trigger
+    function launchRazorpayCheckout() {
+      if (RAZORPAY_KEY_ID.includes("YOUR_KEY")) {
+        // Fallback simulation for preview testing
+        if (confirm("Simulate successful ₹499 Razorpay Payment to activate 30 days?")) {
+          if (currentSalon) {
+            currentSalon.subscription_status = "active";
+            if (supabase) supabase.from("salons").update({ subscription_status: "active" }).eq("id", currentSalon.id);
+          }
+          document.getElementById("paywall-modal").classList.add("hidden");
+          document.getElementById("info-sub-status").innerText = "Active (Subscribed)";
+          showToast("Subscription activated!", "success");
+        }
+        return;
+      }
+
+      const options = {
+        key: RAZORPAY_KEY_ID,
+        amount: 49900, // ₹499.00 in subunits
+        currency: "INR",
+        name: "SalonFlow SaaS",
+        description: "Monthly Pro Subscription",
+        handler: async function (response) {
+          showToast("Payment verified: " + response.razorpay_payment_id, "success");
+          if (currentSalon && supabase) {
+            await supabase.from("salons").update({ 
+              subscription_status: "active", 
+              subscription_id: response.razorpay_payment_id 
+            }).eq("id", currentSalon.id);
+          }
+          document.getElementById("paywall-modal").classList.add("hidden");
+          document.getElementById("info-sub-status").innerText = "Active (Subscribed)";
+        },
+        prefill: {
+          email: currentUser ? currentUser.email : "owner@salon.com"
+        },
+        theme: { color: "#c2410c" }
+      };
+
+      const rzp = new Razorpay(options);
+      rzp.open();
+    }
+
+    // Utility Helpers
+    function showToast(msg, type = "success") {
+      const el = document.getElementById("toast");
+      el.className = `toast toast-${type}`;
+      el.innerText = msg;
+      el.classList.remove("hidden");
+      setTimeout(() => el.classList.add("hidden"), 3500);
+    }
 
     function escapeHtml(str) {
       return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
     }
 
-    // Init App
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("nav-salon-name").innerText = state.salonName;
-      document.getElementById("dashboard-date").innerText = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
-
-      document.querySelectorAll(".nav-btn").forEach(b => {
-        b.addEventListener("click", () => switchView(b.getAttribute("data-view")));
-      });
-
-      document.getElementById("btn-quick-add").addEventListener("click", () => switchView("add-customer"));
-      document.getElementById("btn-view-all-tx").addEventListener("click", () => switchView("transactions"));
-
-      document.getElementById("tx-search").addEventListener("input", (e) => renderTransactions(e.target.value));
-
-      document.getElementById("btn-save-profile").addEventListener("click", () => {
-        state.salonName = document.getElementById("set-salon-name").value.trim() || "Luxe Salon";
-        saveState();
-        document.getElementById("nav-salon-name").innerText = state.salonName;
-        alert("Salon name updated!");
-      });
-
-      document.getElementById("btn-add-service").addEventListener("click", () => {
-        const name = document.getElementById("new-service-name").value.trim();
-        const price = Number(document.getElementById("new-service-price").value);
-        if (name && price > 0) {
-          state.services.push({ name, price });
-          saveState();
-          document.getElementById("new-service-name").value = "";
-          document.getElementById("new-service-price").value = "";
-          renderSettings();
-          populateServices();
-        }
-      });
-
-      populateServices();
-      setupForm();
-      renderDashboard();
-    });
+    function loadDemoMode() {
+      currentUser = { id: "demo", email: "demo@salonflow.com" };
+      currentSalon = { id: "demo-salon", salon_name: "Luxe Salon", subscription_status: "trial", trial_ends_at: new Date(Date.now() + 14*86400000) };
+      salonServices = [...DEFAULT_SERVICES];
+      transactionsList = [
+        { customer_name: "Rahul", customer_phone: "9876543210", service_name: "Hair Cut", price: 300, created_at: new Date().toISOString() },
+        { customer_name: "Arun", customer_phone: "9845012345", service_name: "Beard Trim", price: 200, created_at: new Date().toISOString() }
+      ];
+      renderAllViews();
+    }
   </script>
 </body>
 </html>
