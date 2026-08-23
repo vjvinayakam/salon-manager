@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   
-  <!-- CDNs: Supabase v2, Razorpay Checkout, Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- CDNs: Supabase v2 (Latest UMD bundle supporting publishable keys), Razorpay Checkout, Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.48.0/dist/umd/supabase.min.js"></script>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -387,11 +387,24 @@
      * PRODUCTION CONFIGURATION
      */
     const SUPABASE_URL = "https://hxcfszclzyvhctbphtzn.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_s7ZLRNGSNm9YjLFvTy-b-Q_JlLCS8GJ";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_s7ZLRNGSNm9YjLFvTy-b-Q_JlLCS8GJ";
     const RAZORPAY_KEY_ID = "rzp_live_SZ0KtC8cO2S37n";
 
     // Initialize Supabase Client
-    const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+    let supabase = null;
+    try {
+      if (window.supabase && window.supabase.createClient) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+          }
+        });
+      }
+    } catch (e) {
+      console.error("Supabase Client Init Error:", e);
+    }
 
     let authMode = "signup";
     let currentUser = null;
@@ -414,7 +427,6 @@
       document.getElementById("dashboard-date").innerText = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
 
       if (supabase) {
-        // Listen for Auth changes automatically
         supabase.auth.onAuthStateChange(async (event, session) => {
           if (session && session.user) {
             currentUser = session.user;
@@ -468,18 +480,16 @@
 
       try {
         if (!supabase) {
-          throw new Error("Supabase library not loaded. Check your connection.");
+          throw new Error("Supabase connection failed. Check browser network or script imports.");
         }
 
         if (authMode === "signup") {
-          // 1. Try Signing Up
           const { data: authData, error: authError } = await supabase.auth.signUp({
-            email,
-            password
+            email: email,
+            password: password
           });
 
           if (authError) {
-            // If already registered, attempt direct Sign In
             if (authError.message.toLowerCase().includes("already registered")) {
               const { data: logData, error: logErr } = await supabase.auth.signInWithPassword({ email, password });
               if (logErr) throw logErr;
@@ -491,7 +501,6 @@
             currentUser = authData.user;
           }
 
-          // If no session token returned directly, log in to set cookie/storage
           if (!authData?.session) {
             const { data: logData, error: logErr } = await supabase.auth.signInWithPassword({ email, password });
             if (!logErr && logData.user) {
@@ -499,7 +508,6 @@
             }
           }
 
-          // 2. Initialize Salon Profile
           if (currentUser) {
             const { data: existingSalons } = await supabase
               .from("salons")
@@ -517,7 +525,7 @@
                 }])
                 .select();
 
-              if (sErr) console.warn("Salon create warning:", sErr.message);
+              if (sErr) console.warn("Salon create note:", sErr.message);
 
               if (newSalons && newSalons.length > 0) {
                 currentSalon = newSalons[0];
@@ -532,20 +540,18 @@
             }
           }
         } else {
-          // Direct Sign In
           const { data: logData, error: logErr } = await supabase.auth.signInWithPassword({ email, password });
           if (logErr) throw logErr;
           currentUser = logData.user;
         }
 
-        // Close modal and refresh dashboard
         await loadSalonData();
         document.getElementById("auth-modal").classList.add("hidden");
-        showToast("Logged in successfully!", "success");
+        showToast("Signed in successfully!", "success");
 
       } catch (err) {
         console.error("Auth error:", err);
-        errEl.innerText = err.message || "Authentication error occurred.";
+        errEl.innerText = err.message || "Authentication failed. Please verify credentials.";
       } finally {
         btn.disabled = false;
         btn.innerText = authMode === "signup" ? "Sign Up & Start Trial" : "Sign In";
@@ -570,7 +576,6 @@
         if (salons && salons.length > 0) {
           currentSalon = salons[0];
         } else {
-          // If no salon record exists for this user, auto-generate one
           const { data: newSalons } = await supabase
             .from("salons")
             .insert([{ owner_id: currentUser.id, salon_name: "My Salon" }])
@@ -598,7 +603,7 @@
 
         renderAllViews();
       } catch (e) {
-        console.error("Error loading workspace data:", e);
+        console.error("Data load error:", e);
       }
     }
 
